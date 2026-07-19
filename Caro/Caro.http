@@ -1,0 +1,6 @@
+@Caro_HostAddress = http://localhost:5028
+
+GET {{Caro_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
