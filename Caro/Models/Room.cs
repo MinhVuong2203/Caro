@@ -15,5 +15,6 @@
         public char CurrentTurn { get; set; } = 'X';
 
         public bool IsPlaying { get; set; }
+        public List<Position> WinningCells { get; set; } = [];
     }
 }

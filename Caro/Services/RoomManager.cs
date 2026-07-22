@@ -1,8 +1,10 @@
 ﻿using Caro.Interfaces;
 using Caro.Models;
+using Caro.Utils;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.AspNetCore.SignalR;
 using System.Diagnostics;
+using System.Threading.Tasks;
 
 namespace Caro.Services 
 {
@@ -12,7 +14,7 @@ namespace Caro.Services
         public Room CreateRoom(string playerName, int boardSize, string connectionId)
         {
             // Sinh mã phòng
-            string roomCode = GenerateRoomCode(); 
+            string roomCode = RoomHelper.GenerateRoomCode(_rooms); 
 
             // Tạo người chơi mới
             Player playerCreate = new Player
@@ -37,24 +39,7 @@ namespace Caro.Services
             _rooms.Add(roomCode, room);
             return room;
         }
-        private string GenerateRoomCode()
-        {
-            const string chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789";
-
-            Random random = new();
-
-            string roomCode;
-
-            do
-            {
-                roomCode = new string(
-                    Enumerable.Range(0, 6)
-                        .Select(_ => chars[random.Next(chars.Length)])
-                        .ToArray());
-            }
-            while (_rooms.ContainsKey(roomCode));
-            return roomCode;
-        }
+        
 
         public Room? JoinRoom(string roomCode, string playerName, string connectionId)
         {
@@ -131,5 +116,117 @@ namespace Caro.Services
             return room;
         }
 
+        // Bắt đầu
+        public Room StartGame(string roomCode, string connectionId)
+        {
+            if (!_rooms.TryGetValue(roomCode, out var room))
+                throw new HubException("Phòng không tồn tại.");
+
+            if (room.HostConnectionId != connectionId)
+                throw new HubException("Chỉ chủ phòng mới được bắt đầu.");
+
+            if (room.Player1 == null || room.Player2 == null)
+                throw new HubException("Chưa đủ người chơi.");
+
+            room.IsPlaying = true;
+
+            room.CurrentTurn = 'X';
+
+            return room;
+        }
+
+        // Dừng
+        public Room StopGame(string roomCode, string connectionId)
+        {
+            if (!_rooms.TryGetValue(roomCode, out var room))
+                throw new HubException("Phòng không tồn tại.");
+            if (room.HostConnectionId != connectionId)
+                throw new HubException("Chỉ chủ phòng mới được dừng");
+            room.IsPlaying = false;
+            return room;
+        }
+
+        // Đánh lại
+        public Room RestartGame(string roomCode, string connectionId)
+        {
+            if (!_rooms.TryGetValue(roomCode, out var room))
+                throw new HubException("Phòng không tồn tại.");
+
+            if (room.HostConnectionId != connectionId)
+                throw new HubException("Chỉ chủ phòng mới được đấu lại.");
+
+            // Reset bàn cờ
+            room.Board = new char[room.BoardSize, room.BoardSize];
+           
+            // Xóa các ô chiến thắng
+            room.WinningCells.Clear();
+
+            // Trở về trạng thái ban đầu
+            room.CurrentTurn = 'X';
+            room.IsPlaying = true;
+
+            return room;
+        }
+
+        // Nước đi
+        public Room? PlacePiece(string roomCode, string connectionId, int row, int col)
+        {
+            // 1. Kiểm tra phòng tồn tại
+            if (!_rooms.TryGetValue(roomCode, out Room? room))
+            {
+                throw new HubException("Phòng không tồn tại.");
+            }
+            // 2. Kiểm tra game đã bắt đầu chưa
+            if (!room.IsPlaying)
+            {
+                return room;
+            }
+            // 3. Xác định người chơi đang đánh (Player1 hay Player2)
+            Player? player = null;
+            if (room.Player1?.ConnectionId == connectionId)
+                player = room.Player1;
+            else if (room.Player2?.ConnectionId == connectionId)
+                player = room.Player2;
+
+            if (player == null)
+                throw new HubException("Bạn không thuộc phòng này.");
+            // 4. Kiểm tra đúng lượt hay không
+            if (player.Symbol != room.CurrentTurn)
+            {
+                throw new HubException("Xin thí chủ dừng tay! Chưa đến lượt thí chủ.");
+            }
+            // 5. Kiểm tra tọa độ có hợp lệ không
+            if (row < 0 || row >= room.BoardSize || col < 0 || col >= room.BoardSize)
+            {
+                throw new HubException("Nước đi này không lường trước được (không hợp lệ).");
+            }
+            // 6. Kiểm tra ô đã có quân chưa
+            if (room.Board[row, col] != '\0')
+            {
+                throw new HubException("Ô này đã có quân rồi thí chủ ơi!");
+            }
+            // 7. Đánh dấu quân lên bàn cờ
+            room.Board[row, col] = (char)player.Symbol;
+            // 8. Kiểm tra thắng/thua
+            var winningCells = BoardHelper.CheckWinner(room.Board, row, col);
+
+            if (winningCells != null)
+            {
+                room.IsPlaying = false;
+
+                room.WinningCells = winningCells;
+            }
+            else
+            {
+                // 9. Chuyển lượt
+                room.CurrentTurn = room.CurrentTurn == 'X'
+                    ? 'O'
+                    : 'X';
+            }
+            // 10. Trả Room để Hub broadcast RoomUpdated
+            return room;
+        }
+
+     
     }
 }

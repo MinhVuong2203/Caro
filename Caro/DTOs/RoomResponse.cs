@@ -2,7 +2,7 @@
 
 namespace Caro.DTOs
 {
-    public class CreateRoomResponse
+    public class RoomResponse
     {
         public string RoomCode { get; set; } = "";
         public Player? Player1 { get; set; }
@@ -11,5 +11,7 @@ namespace Caro.DTOs
         public int BoardSize { get; set; }
         public char CurrentTurn { get; set; } = 'X';
         public bool IsPlaying { get; set; }
+        public string[][] Board { get; set; } = [];
+        public List<Position> WinningCells { get; set; } = [];
     }
 }
