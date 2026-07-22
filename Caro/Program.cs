@@ -15,17 +15,29 @@ builder.Services.AddSignalR();
 // Dependency Injection
 builder.Services.AddSingleton<IRoomManager, RoomManager>();
 
+//builder.Services.AddCors(options =>
+//{
+//    options.AddPolicy(
+//        "AllowVue",
+//        policy =>
+//        {
+//            policy.WithOrigins("http://localhost:5173") // Thay đổi URL này thành URL của ứng dụng Vue.js 
+//                  .AllowAnyHeader()
+//                  .AllowAnyMethod()
+//                  .AllowCredentials(); // Cho phep gửi cookie và thông tin xác thực
+//        });
+//});
+
+
 builder.Services.AddCors(options =>
 {
-    options.AddPolicy(
-        "AllowVue",
-        policy =>
-        {
-            policy.WithOrigins("http://localhost:5173") // Thay đổi URL này thành URL của ứng dụng Vue.js 
-                  .AllowAnyHeader()
-                  .AllowAnyMethod()
-                  .AllowCredentials(); // Cho phep gửi cookie và thông tin xác thực
-        });
+    options.AddDefaultPolicy(policy =>
+    {
+        policy
+            .AllowAnyOrigin()
+            .AllowAnyHeader()
+            .AllowAnyMethod();
+    });
 });
 
 
@@ -38,12 +50,15 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+//Port deloy
+var port = Environment.GetEnvironmentVariable("PORT") ?? "8080";
+app.Urls.Add($"http://0.0.0.0:{port}");
+//app.UseHttpsRedirection();
 
 app.UseAuthorization();
 
 // Sử dụng CORS
-app.UseCors("AllowVue");
+app.UseCors();
 
 app.MapControllers();
 
