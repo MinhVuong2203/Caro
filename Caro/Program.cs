@@ -15,28 +15,18 @@ builder.Services.AddSignalR();
 // Dependency Injection
 builder.Services.AddSingleton<IRoomManager, RoomManager>();
 
-//builder.Services.AddCors(options =>
-//{
-//    options.AddPolicy(
-//        "AllowVue",
-//        policy =>
-//        {
-//            policy.WithOrigins("http://localhost:5173") // Thay đổi URL này thành URL của ứng dụng Vue.js 
-//                  .AllowAnyHeader()
-//                  .AllowAnyMethod()
-//                  .AllowCredentials(); // Cho phep gửi cookie và thông tin xác thực
-//        });
-//});
-
-
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(policy =>
+    options.AddPolicy("AllowVue", policy =>
     {
         policy
-            .AllowAnyOrigin()
+            .WithOrigins(
+                "http://localhost:5173",
+                "https://carofe-production.up.railway.app"
+            )
             .AllowAnyHeader()
-            .AllowAnyMethod();
+            .AllowAnyMethod()
+            .AllowCredentials();
     });
 });
 
@@ -58,7 +48,7 @@ app.Urls.Add($"http://0.0.0.0:{port}");
 app.UseAuthorization();
 
 // Sử dụng CORS
-app.UseCors();
+app.UseCors("AllowVue");
 
 app.MapControllers();
 
