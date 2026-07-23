@@ -4,6 +4,7 @@ using Caro.Utils;
 using Microsoft.AspNetCore.Mvc.Formatters;
 using Microsoft.AspNetCore.SignalR;
 using System.Diagnostics;
+using System.Numerics;
 using System.Threading.Tasks;
 
 namespace Caro.Services 
@@ -21,7 +22,6 @@ namespace Caro.Services
             {
                 ConnectionId = connectionId,
                 Name = playerName,
-                Symbol = 'X'
             }; 
             // Tạo phòng mới
             Room room = new Room
@@ -50,42 +50,65 @@ namespace Caro.Services
             }
             // check chỗ trống
             // Vì logic ngầm là Đủ 2 player thì mới được Swap
-            if (room.Player2 != null) throw new HubException("Phòng đã đầy.");
+            //if (room.Player2 != null) throw new HubException("Phòng đã đầy.");
 
-            Player playerJoin = new Player
+            Player player = new Player
             {
                 ConnectionId = connectionId,
                 Name = playerName,
-                Symbol = 'O'
             };
-            room.Player2 = playerJoin;
+            if (room.Player1 == null)
+            {
+                room.Player1 = player;  
+            }
+            else if (room.Player2 == null)
+            {
+                room.Player2 = player;
+            }
+            else
+            {
+                room.Viewers.Add(player);
+            }
+
             return room;
         }
 
-        public Room? Reconnect(string roomCode, string playerName, string connnectionId)
+        public Room? Reconnect(string roomCode, string playerName, string connectionId)
         {
             if (!_rooms.TryGetValue(roomCode, out var room)) return null;
 
+            // Nếu là player1 F5
             if (room.Player1?.Name == playerName)
             {
                 // Cấp lại connectionId cho Player1 và cập nhật HostConnectionId nếu cần
                 var oldConnectionId = room.Player1.ConnectionId;
-                room.Player1.ConnectionId = connnectionId;
+                room.Player1.ConnectionId = connectionId;
                 if (room.HostConnectionId == oldConnectionId)
                 {
-                    room.HostConnectionId = connnectionId;
+                    room.HostConnectionId = connectionId;
                 }
                 return room;
             }
-
+            // Nếu là player2 F5
             if (room.Player2?.Name == playerName)
             {
                 var oldConnectionId = room.Player2.ConnectionId;
-                room.Player2.ConnectionId = connnectionId;
+                room.Player2.ConnectionId = connectionId;
                 if (room.HostConnectionId == oldConnectionId)
                 {
-                    room.HostConnectionId = connnectionId;
+                    room.HostConnectionId = connectionId;
                 }
+                return room;
+            }
+            // Nếu là Viewer F5
+            var viewer = room.Viewers.FirstOrDefault(x => x.Name == playerName);
+            if (viewer != null)
+            {
+                var oldId = viewer.ConnectionId;
+                viewer.ConnectionId = connectionId;
+
+                if (room.HostConnectionId == oldId)
+                    room.HostConnectionId = connectionId;
                 return room;
             }
             return null;
@@ -95,6 +118,9 @@ namespace Caro.Services
         {
             if (!_rooms.TryGetValue(roomCode, out var room))
                 return null;
+
+            bool isHost = room.HostConnectionId == connectionId;
+
             // Player1 rời
             if (room.Player1?.ConnectionId == connectionId)
             {
@@ -107,12 +133,94 @@ namespace Caro.Services
                 room.Player2 = null;
             }
 
+            // Viewer rời
+            var viewer = room.Viewers.FirstOrDefault(x => x.ConnectionId == connectionId);
+            if (viewer != null)
+            {
+                room.Viewers.Remove(viewer);
+            }
+
             // Không còn ai -> Xóa phòng
-            if (room.Player1 == null && room.Player2 == null)
+            if (room.Player1 == null &&
+                room.Player2 == null &&
+                room.Viewers.Count == 0)
             {
                 _rooms.Remove(roomCode);
                 return null;
             }
+
+            // ==========================
+            // Lấp Player1 nếu bị trống
+            // ==========================
+            if (room.Player1 == null)
+            {
+                if (room.Player2 != null)
+                {
+                    room.Player1 = room.Player2;
+                    room.Player2 = null;
+                }
+
+                if (room.Player2 == null && room.Viewers.Count > 0)
+                {
+                    room.Player2 = room.Viewers[0];
+                    room.Viewers.RemoveAt(0);
+                }
+            }
+
+            // ==========================
+            // Lấp Player2 nếu bị trống
+            // ==========================
+            if (room.Player2 == null && room.Viewers.Count > 0)
+            {
+                room.Player2 = room.Viewers[0];
+                room.Viewers.RemoveAt(0);
+            }
+
+            // ==========================
+            // Chuyển Host nếu Host vừa rời
+            // ==========================
+            if (isHost)
+            {
+                room.HostConnectionId =
+                    room.Player1?.ConnectionId
+                    ?? room.Player2?.ConnectionId
+                    ?? room.Viewers.First().ConnectionId;
+            }
+
+            return room;
+        }
+
+        public Room SwapPlayer(string roomCode, string requesterConnectionId, string sourceConnectionId, string targetConnectionId)
+        {
+            if (!_rooms.TryGetValue(roomCode, out var room))
+                throw new HubException("Phòng không tồn tại.");
+
+            if (room.HostConnectionId != requesterConnectionId)
+                throw new HubException("Chỉ chủ phòng mới được đổi vị trí.");
+
+            if (room.IsPlaying)
+            {
+                throw new HubException("Không thể đổi vị trí khi trận đấu đang diễn ra.");
+            }
+
+            if (sourceConnectionId == targetConnectionId)
+                throw new HubException("Vui lòng chọn hai người khác nhau.");
+
+            if (string.IsNullOrWhiteSpace(sourceConnectionId) || string.IsNullOrWhiteSpace(targetConnectionId))
+            {
+                throw new HubException("Thiếu thông tin người chơi.");
+            }
+
+            var source = RoomHelper.FindPosition(room, sourceConnectionId);
+            var target = RoomHelper.FindPosition(room, targetConnectionId);
+
+            var sourcePlayer = RoomHelper.GetPlayer(room, source.Position, source.ViewerIndex);
+            var targetPlayer = RoomHelper.GetPlayer(room, target.Position, target.ViewerIndex);
+
+           
+            RoomHelper.SetPlayer(room, source.Position, source.ViewerIndex, targetPlayer);
+            RoomHelper.SetPlayer(room, target.Position, target.ViewerIndex, sourcePlayer);
+
             return room;
         }
 
@@ -126,7 +234,7 @@ namespace Caro.Services
                 throw new HubException("Chỉ chủ phòng mới được bắt đầu.");
 
             if (room.Player1 == null || room.Player2 == null)
-                throw new HubException("Chưa đủ người chơi.");
+                throw new HubException("Chưa đủ tuyển thủ .");
 
             room.IsPlaying = true;
 
@@ -164,7 +272,7 @@ namespace Caro.Services
             // Trở về trạng thái ban đầu
             room.CurrentTurn = 'X';
             room.IsPlaying = true;
-
+            room.LastMove = null;
             return room;
         }
 
@@ -183,15 +291,26 @@ namespace Caro.Services
             }
             // 3. Xác định người chơi đang đánh (Player1 hay Player2)
             Player? player = null;
-            if (room.Player1?.ConnectionId == connectionId)
-                player = room.Player1;
-            else if (room.Player2?.ConnectionId == connectionId)
-                player = room.Player2;
 
-            if (player == null)
+            if (room.Player1?.ConnectionId == connectionId)
+            {
+                player = room.Player1;
+            }
+            else if (room.Player2?.ConnectionId == connectionId)
+            {
+                player = room.Player2;
+            }
+            else if (room.Viewers.Any(v => v.ConnectionId == connectionId))
+            {
+                throw new HubException("Khán giả không được nhúng tay vào trận đấu!");
+            }
+            else
+            {
                 throw new HubException("Bạn không thuộc phòng này.");
-            // 4. Kiểm tra đúng lượt hay không
-            if (player.Symbol != room.CurrentTurn)
+            }
+            //// 4. Kiểm tra đúng lượt hay không
+            char symbol = room.Player1?.ConnectionId == connectionId ? 'X' : 'O';
+            if (symbol != room.CurrentTurn)
             {
                 throw new HubException("Xin thí chủ dừng tay! Chưa đến lượt thí chủ.");
             }
@@ -206,10 +325,12 @@ namespace Caro.Services
                 throw new HubException("Ô này đã có quân rồi thí chủ ơi!");
             }
             // 7. Đánh dấu quân lên bàn cờ
-            room.Board[row, col] = (char)player.Symbol;
+            room.Board[row, col] = symbol;
             room.LastMove = new Position
-                { Row = row, 
-            Col = col};
+                { 
+                    Row = row, 
+                    Col = col
+                };
             // 8. Kiểm tra thắng/thua
             var winningCells = BoardHelper.CheckWinner(room.Board, row, col);
 

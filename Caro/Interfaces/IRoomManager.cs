@@ -9,6 +9,7 @@ namespace Caro.Interfaces
         Room? JoinRoom(string roomCode, string playerName, string connectionId);
         Room? Reconnect(string roomCode, string playerName, string connnectionId);
         Room? LeaveRoom(string roomCode, string connectionId);
+        Room SwapPlayer(string roomCode, string requesterConnectionId, string sourceConnectionId, string targetConnectionId);
         Room StartGame(string roomCode, string connectionId);
         Room StopGame(string roomCode, string connectionId);
         Room RestartGame(string roomCode, string connectionId);

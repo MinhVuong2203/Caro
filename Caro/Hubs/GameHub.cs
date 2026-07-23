@@ -63,6 +63,23 @@ namespace Caro.Hubs
             }
         }
 
+        // Swap
+        public async Task<RoomResponse> SwapPlayer(SwapPlayerRequest request)
+        {
+            var room = _roomManager.SwapPlayer(
+                request.RoomCode,
+                Context.ConnectionId,          // Người yêu cầu (Host)
+                request.SourceConnectionId,
+                request.TargetConnectionId);
+
+            var response = RoomMapper.ToResponse(room);
+
+            await Clients.Group(room.RoomCode)
+                .SendAsync("RoomUpdated", response);
+
+            return response;
+        }
+
         // Bắt đầu
         public async Task StartGame(string roomCode)
         {

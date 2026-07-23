@@ -19,6 +19,7 @@ namespace Caro.Mapper
                 Board = ConvertBoard(room.Board),
                 WinningCells = room.WinningCells,
                 LastMove = room.LastMove,
+                Viewers = room.Viewers,
             };
         }
         private static string[][] ConvertBoard(char[,] board)
