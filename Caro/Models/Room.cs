@@ -16,5 +16,6 @@
 
         public bool IsPlaying { get; set; }
         public List<Position> WinningCells { get; set; } = [];
+        public Position? LastMove { get; set; }
     }
 }

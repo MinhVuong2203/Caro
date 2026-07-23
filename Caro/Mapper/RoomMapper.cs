@@ -17,7 +17,8 @@ namespace Caro.Mapper
                 CurrentTurn = room.CurrentTurn,
                 IsPlaying = room.IsPlaying,
                 Board = ConvertBoard(room.Board),
-                WinningCells = room.WinningCells
+                WinningCells = room.WinningCells,
+                LastMove = room.LastMove,
             };
         }
         private static string[][] ConvertBoard(char[,] board)

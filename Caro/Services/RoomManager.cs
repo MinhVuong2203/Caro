@@ -130,7 +130,7 @@ namespace Caro.Services
 
             room.IsPlaying = true;
 
-            room.CurrentTurn = 'X';
+            //room.CurrentTurn = 'X';
 
             return room;
         }
@@ -207,6 +207,9 @@ namespace Caro.Services
             }
             // 7. Đánh dấu quân lên bàn cờ
             room.Board[row, col] = (char)player.Symbol;
+            room.LastMove = new Position
+                { Row = row, 
+            Col = col};
             // 8. Kiểm tra thắng/thua
             var winningCells = BoardHelper.CheckWinner(room.Board, row, col);
 
@@ -221,12 +224,10 @@ namespace Caro.Services
                 // 9. Chuyển lượt
                 room.CurrentTurn = room.CurrentTurn == 'X'
                     ? 'O'
-                    : 'X';
+                    : 'X';    
             }
             // 10. Trả Room để Hub broadcast RoomUpdated
             return room;
         }
-
-     
     }
 }

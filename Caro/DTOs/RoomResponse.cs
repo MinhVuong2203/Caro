@@ -13,5 +13,6 @@ namespace Caro.DTOs
         public bool IsPlaying { get; set; }
         public string[][] Board { get; set; } = [];
         public List<Position> WinningCells { get; set; } = [];
+        public Position? LastMove { get; set; }
     }
 }
