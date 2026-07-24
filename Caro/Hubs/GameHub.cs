@@ -80,34 +80,74 @@ namespace Caro.Hubs
             return response;
         }
 
-        // Bắt đầu
-        public async Task StartGame(string roomCode)
+        public async Task ToggleReady(string roomCode)
         {
-            var room = _roomManager.StartGame(roomCode, Context.ConnectionId);
+            var room = _roomManager.ToggleReady(roomCode, Context.ConnectionId);
 
             await Clients.Group(room.RoomCode)
                 .SendAsync("RoomUpdated", RoomMapper.ToResponse(room));
         }
 
-        public async Task StopGame(string roomCode)
-        {
-            var room = _roomManager.StopGame(roomCode, Context.ConnectionId);
-            await Clients.Group(room.RoomCode)
-                .SendAsync("RoomUpdated", RoomMapper.ToResponse(room));
-        }
-
-        public async Task RestartGame(string roomCode)
-        {
-            var room = _roomManager.RestartGame(roomCode, Context.ConnectionId);
-            await Clients.Group(room.RoomCode)
-                .SendAsync("RoomUpdated", RoomMapper.ToResponse(room));
-        }
 
         public async Task PlacePiece(PlacePieceRequest request)
         {
             var room = _roomManager.PlacePiece(request.RoomCode, Context.ConnectionId, request.Row, request.Col);
             if (room == null) return;
             await Clients.Group(room.RoomCode).SendAsync("RoomUpdated", RoomMapper.ToResponse(room));
+        }
+
+        public async Task RequestDraw(string roomCode)
+        {
+            var room = _roomManager.RequestDraw(roomCode, Context.ConnectionId);
+
+            var target =
+                room.Player1?.ConnectionId == Context.ConnectionId
+                    ? room.Player2
+                    : room.Player1;
+
+            if (target != null)
+            {
+                await Clients.Client(target.ConnectionId)
+                    .SendAsync("ReceiveDrawRequest");
+            }
+        }
+
+        public async Task AcceptDraw(string roomCode)
+        {
+            var room = _roomManager.AcceptDraw(roomCode, Context.ConnectionId);
+
+            await Clients.Group(room.RoomCode)
+                .SendAsync("RoomUpdated", RoomMapper.ToResponse(room));
+        }
+
+        public async Task RejectDraw(string roomCode)
+        {
+            var room = _roomManager.RejectDraw(roomCode, Context.ConnectionId);
+
+            Player? requester;
+
+            if (room.Player1?.ConnectionId == Context.ConnectionId)
+            {
+                requester = room.Player2;
+            }
+            else
+            {
+                requester = room.Player1;
+            }
+
+            if (requester == null)
+                return;
+
+            await Clients.Client(requester.ConnectionId)
+                .SendAsync("DrawRejected");
+        }
+
+        public async Task UpdateAvatar(UpdateAvatarRequest request)
+        {
+            var room = _roomManager.UpdateAvatar(request, Context.ConnectionId);
+
+            await Clients.Group(room.RoomCode)
+                .SendAsync("RoomUpdated", RoomMapper.ToResponse(room));
         }
 
     }

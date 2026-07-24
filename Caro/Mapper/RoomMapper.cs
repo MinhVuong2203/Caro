@@ -12,6 +12,8 @@ namespace Caro.Mapper
                 RoomCode = room.RoomCode,
                 Player1 = room.Player1,
                 Player2 = room.Player2,
+                Player1Ready = room.Player1Ready,
+                Player2Ready = room.Player2Ready,
                 HostConnectionId = room.HostConnectionId,
                 BoardSize = room.BoardSize,
                 CurrentTurn = room.CurrentTurn,
@@ -20,6 +22,7 @@ namespace Caro.Mapper
                 WinningCells = room.WinningCells,
                 LastMove = room.LastMove,
                 Viewers = room.Viewers,
+                DrawRequesterConnectionId = room.DrawRequesterConnectionId
             };
         }
         private static string[][] ConvertBoard(char[,] board)

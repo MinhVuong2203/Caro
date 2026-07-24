@@ -7,6 +7,8 @@
         public Player? Player1 { get; set; }
 
         public Player? Player2 { get; set; }
+        public bool Player1Ready { get; set; } // Trạng thái sẵn sàng
+        public bool Player2Ready { get; set; } // Trạng thái sẵn sàng
         public string HostConnectionId { get; set; } = "";
         public int BoardSize { get; set; }
 
@@ -18,5 +20,6 @@
         public List<Position> WinningCells { get; set; } = [];
         public Position? LastMove { get; set; }
         public List<Player> Viewers { get; set; } = [];
+        public string? DrawRequesterConnectionId { get; set; } // Yêu cầu hòa
     }
 }

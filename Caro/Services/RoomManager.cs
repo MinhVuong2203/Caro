@@ -1,4 +1,5 @@
-﻿using Caro.Interfaces;
+﻿using Caro.DTOs;
+using Caro.Interfaces;
 using Caro.Models;
 using Caro.Utils;
 using Microsoft.AspNetCore.Mvc.Formatters;
@@ -206,10 +207,6 @@ namespace Caro.Services
             if (sourceConnectionId == targetConnectionId)
                 throw new HubException("Vui lòng chọn hai người khác nhau.");
 
-            if (string.IsNullOrWhiteSpace(sourceConnectionId) || string.IsNullOrWhiteSpace(targetConnectionId))
-            {
-                throw new HubException("Thiếu thông tin người chơi.");
-            }
 
             var source = RoomHelper.FindPosition(room, sourceConnectionId);
             var target = RoomHelper.FindPosition(room, targetConnectionId);
@@ -224,57 +221,78 @@ namespace Caro.Services
             return room;
         }
 
-        // Bắt đầu
-        public Room StartGame(string roomCode, string connectionId)
+        public Room ToggleReady(string roomCode, string connectionId)
         {
             if (!_rooms.TryGetValue(roomCode, out var room))
-                throw new HubException("Phòng không tồn tại.");
+            {
+                throw new Exception("Không tìm thấy phòng.");
+            }
 
-            if (room.HostConnectionId != connectionId)
-                throw new HubException("Chỉ chủ phòng mới được bắt đầu.");
+            bool isHost = room.HostConnectionId == connectionId;
 
+            bool isPlayer1 = room.Player1?.ConnectionId == connectionId;
+            bool isPlayer2 = room.Player2?.ConnectionId == connectionId;
+
+            // Viewer không phải Host thì không được thao tác
+            if (!isHost && !isPlayer1 && !isPlayer2)
+                throw new Exception("Khán giả thì ngồi im!");
+
+            // ======================
+            // Đang chơi -> Dừng game
+            // ======================
+            if (room.IsPlaying && room.WinningCells.Count == 0)
+            {
+                room.IsPlaying = false;
+                return room;
+            }
+
+            // ======================
+            // Host đang là Viewer
+            // Không có trạng thái Ready
+            // ======================
+            if (!isPlayer1 && !isPlayer2)
+                return room;
+
+            // ======================
+            // Toggle Ready
+            // ======================
+            if (isPlayer1)
+                room.Player1Ready = !room.Player1Ready;
+
+            if (isPlayer2)
+                room.Player2Ready = !room.Player2Ready;
+
+            // Chưa đủ người
             if (room.Player1 == null || room.Player2 == null)
-                throw new HubException("Chưa đủ tuyển thủ .");
+                return room;
+
+            // Chưa cùng Ready
+            if (!room.Player1Ready || !room.Player2Ready)
+                return room;
+
+            // ======================
+            // Hai người cùng Ready
+            // ======================
+
+            room.Player1Ready = false;
+            room.Player2Ready = false;
 
             room.IsPlaying = true;
-
             //room.CurrentTurn = 'X';
 
+            // Nếu ván trước đã kết thúc thì reset
+            if (room.WinningCells.Count > 0)
+            {
+                room.Board = new char[room.BoardSize, room.BoardSize];
+                room.WinningCells.Clear();
+                room.LastMove = null;
+                room.DrawRequesterConnectionId = null;
+                room.CurrentTurn = 'X';
+            }
+
             return room;
         }
 
-        // Dừng
-        public Room StopGame(string roomCode, string connectionId)
-        {
-            if (!_rooms.TryGetValue(roomCode, out var room))
-                throw new HubException("Phòng không tồn tại.");
-            if (room.HostConnectionId != connectionId)
-                throw new HubException("Chỉ chủ phòng mới được dừng");
-            room.IsPlaying = false;
-            return room;
-        }
-
-        // Đánh lại
-        public Room RestartGame(string roomCode, string connectionId)
-        {
-            if (!_rooms.TryGetValue(roomCode, out var room))
-                throw new HubException("Phòng không tồn tại.");
-
-            if (room.HostConnectionId != connectionId)
-                throw new HubException("Chỉ chủ phòng mới được đấu lại.");
-
-            // Reset bàn cờ
-            room.Board = new char[room.BoardSize, room.BoardSize];
-           
-            // Xóa các ô chiến thắng
-            room.WinningCells.Clear();
-
-            // Trở về trạng thái ban đầu
-            room.CurrentTurn = 'X';
-            room.IsPlaying = true;
-            room.LastMove = null;
-            return room;
-        }
 
         // Nước đi
         public Room? PlacePiece(string roomCode, string connectionId, int row, int col)
@@ -337,8 +355,17 @@ namespace Caro.Services
             if (winningCells != null)
             {
                 room.IsPlaying = false;
-
                 room.WinningCells = winningCells;
+                if (room.CurrentTurn == 'X')
+                {
+                    room.Player1!.WinCount++;
+                    room.Player2!.LoseCount++;
+                }
+                else
+                {
+                    room.Player2!.WinCount++;
+                    room.Player1!.LoseCount++;
+                }
             }
             else
             {
@@ -350,5 +377,100 @@ namespace Caro.Services
             // 10. Trả Room để Hub broadcast RoomUpdated
             return room;
         }
+
+        // yêu cầu hòa
+        public Room RequestDraw(string roomCode, string connectionId)
+        {
+            if (!_rooms.TryGetValue(roomCode, out Room? room))
+            {
+                throw new HubException("Phòng không tồn tại.");
+            }
+
+            if (!room.IsPlaying)
+                throw new Exception("Ván đấu chưa bắt đầu.");
+
+            if (room.DrawRequesterConnectionId != null)
+                throw new Exception("Đã có một yêu cầu hòa đang chờ.");
+
+            bool isPlayer =
+                room.Player1?.ConnectionId == connectionId ||
+                room.Player2?.ConnectionId == connectionId;
+
+            if (!isPlayer)
+                throw new Exception("Viewer không thể yêu cầu hòa.");
+
+            room.DrawRequesterConnectionId = connectionId;
+
+            return room;
+        }
+
+        public Room AcceptDraw(string roomCode, string connectionId)
+        {
+            if (!_rooms.TryGetValue(roomCode, out Room? room))
+            {
+                throw new HubException("Phòng không tồn tại.");
+            }
+
+            if (room.DrawRequesterConnectionId == null)
+                throw new Exception("Không có yêu cầu hòa.");
+
+            if (room.DrawRequesterConnectionId == connectionId)
+                throw new Exception("Bạn không thể tự chấp nhận yêu cầu hòa.");
+
+            room.Player1!.DrawCount++;
+            room.Player2!.DrawCount++;
+
+            room.IsPlaying = false;
+            room.WinningCells.Clear();
+            room.DrawRequesterConnectionId = null;
+            room.Board = new char[room.BoardSize, room.BoardSize];
+            room.LastMove = null;
+            room.CurrentTurn = 'X';
+
+            return room;
+        }
+
+        public Room RejectDraw(string roomCode, string connectionId)
+        {
+            if (!_rooms.TryGetValue(roomCode, out Room? room))
+            {
+                throw new HubException("Phòng không tồn tại.");
+            }
+
+            if (room.DrawRequesterConnectionId == null)
+                throw new Exception("Không có yêu cầu hòa.");
+
+            if (room.DrawRequesterConnectionId == connectionId)
+                throw new Exception("Bạn không thể tự từ chối yêu cầu hòa.");
+
+            room.DrawRequesterConnectionId = null;
+
+            return room;
+        }
+
+        public Room UpdateAvatar(UpdateAvatarRequest request, string connectionId)
+        {
+            if (!_rooms.TryGetValue(request.RoomCode, out var room))
+                throw new Exception("Không tìm thấy phòng.");
+
+            Player? player = null;
+
+            if (room.Player1?.ConnectionId == connectionId)
+                player = room.Player1;
+            else if (room.Player2?.ConnectionId == connectionId)
+                player = room.Player2;
+            else
+                player = room.Viewers.FirstOrDefault(v => v.ConnectionId == connectionId);
+
+            if (player == null)
+                throw new Exception("Không tìm thấy người chơi.");
+
+            player.AvatarIcon = request.Icon;
+            player.AvatarAnimation = request.Animation;
+            player.AvatarColor = request.Color;
+
+            return room;
+        }
+
     }
 }
