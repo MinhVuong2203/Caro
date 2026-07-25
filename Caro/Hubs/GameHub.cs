@@ -150,6 +150,35 @@ namespace Caro.Hubs
                 .SendAsync("RoomUpdated", RoomMapper.ToResponse(room));
         }
 
+
+        // Emoji
+        public async Task SendEmoji(SendEmojiRequest request)
+        {
+            // Gửi cho tất cả người chơi trong phòng ngoại trừ người gửi (người gửi sẽ hiển thị phía client cho mượt)
+            await Clients.OthersInGroup(request.RoomCode).SendAsync("ReceiveEmoji", new
+            {
+                ConnectionId = Context.ConnectionId,
+                Emoji= request.Emoji
+            });
+        }
+
+        // Room kick
+        public async Task KickPlayer(KickPlayerRequest request)
+        {
+            var room = _roomManager.KickPlayer(request.RoomCode, Context.ConnectionId, request.TargetConnectionId);
+
+            if (room == null) return;
+
+            // Báo riêng cho người bị kick TRƯỚC khi remove khỏi group
+            await Clients.Client(request.TargetConnectionId).SendAsync("Kicked");
+
+            // Xóa họ khỏi group để không nhận RoomUpdated / event của phòng nữa
+            await Groups.RemoveFromGroupAsync(request.TargetConnectionId, request.RoomCode);
+
+            // Cập nhật cho những người còn lại trong phòng
+            await Clients.Group(room.RoomCode).SendAsync("RoomUpdated", RoomMapper.ToResponse(room));
+        }
+
     }
 }
 

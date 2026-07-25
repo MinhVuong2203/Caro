@@ -472,5 +472,69 @@ namespace Caro.Services
             return room;
         }
 
+        public Room? KickPlayer(string roomCode, string requesterConnectionId, string targetConnectionId)
+        {
+            if (!_rooms.TryGetValue(roomCode, out var room))
+                throw new HubException("Phòng không tồn tại.");
+
+            if (room.HostConnectionId != requesterConnectionId)
+                throw new HubException("Chỉ chủ phòng mới được kick.");
+
+            if (requesterConnectionId == targetConnectionId)
+                throw new HubException("Bạn không thể tự kick chính mình.");
+
+            bool isTargetPlaying =
+                room.Player1?.ConnectionId == targetConnectionId ||
+                room.Player2?.ConnectionId == targetConnectionId;
+
+            if (isTargetPlaying && room.IsPlaying)
+                throw new HubException("Không thể kick người chơi khi ván đấu đang diễn ra.");
+
+            // Player1 bị kick
+            if (room.Player1?.ConnectionId == targetConnectionId)
+            {
+                room.Player1 = null;
+            }
+            // Player2 bị kick
+            else if (room.Player2?.ConnectionId == targetConnectionId)
+            {
+                room.Player2 = null;
+            }
+            // Viewer bị kick
+            else
+            {
+                var viewer = room.Viewers.FirstOrDefault(v => v.ConnectionId == targetConnectionId);
+                if (viewer == null)
+                    throw new HubException("Không tìm thấy người này trong phòng.");
+
+                room.Viewers.Remove(viewer);
+                return room; // viewer thì không cần lấp chỗ ai cả
+            }
+
+            // Lấp Player1 nếu trống
+            if (room.Player1 == null)
+            {
+                if (room.Player2 != null)
+                {
+                    room.Player1 = room.Player2;
+                    room.Player2 = null;
+                }
+                else if (room.Viewers.Count > 0)
+                {
+                    room.Player1 = room.Viewers[0];
+                    room.Viewers.RemoveAt(0);
+                }
+            }
+
+            // Lấp Player2 nếu trống
+            if (room.Player2 == null && room.Viewers.Count > 0)
+            {
+                room.Player2 = room.Viewers[0];
+                room.Viewers.RemoveAt(0);
+            }
+
+            return room;
+        }
+
     }
 }

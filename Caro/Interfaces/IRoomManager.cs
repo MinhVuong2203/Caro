@@ -17,5 +17,7 @@ namespace Caro.Interfaces
         Room AcceptDraw(string roomCode, string connectionId);
         Room RejectDraw(string roomCode, string connectionId);
         Room UpdateAvatar(UpdateAvatarRequest request, string connectionId);
+
+        Room? KickPlayer(string roomCode, string requesterConnectionId, string targetConnectionId);
     }
 }
