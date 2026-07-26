@@ -13,6 +13,38 @@ namespace Caro.Services
     public class RoomManager : IRoomManager
     {
         private readonly Dictionary<string, Room> _rooms = new();
+
+        public Room GetRoom(string roomCode)
+        {
+            if (!_rooms.TryGetValue(roomCode, out var room))
+                throw new HubException("Không tìm thấy phòng.");
+
+            return room;
+        }
+
+        public IEnumerable<Room> GetRooms()
+        {
+            return _rooms.Values;
+        }
+
+        private void ResetGame(Room room, bool isResetBoard = true)
+        {
+            room.IsPlaying = false;
+            room.CurrentTurn = 'X';
+
+            room.Player1Ready = false;
+            room.Player2Ready = false;
+
+            room.WinningCells.Clear();
+            room.LastMove = null;
+
+            room.DrawRequesterConnectionId = null;
+
+            room.TurnDeadline = null;
+
+            if (isResetBoard) room.Board = new char[room.BoardSize, room.BoardSize];
+        }
+
         public Room CreateRoom(string playerName, int boardSize, string connectionId)
         {
             // Sinh mã phòng
@@ -278,21 +310,23 @@ namespace Caro.Services
             room.Player2Ready = false;
 
             room.IsPlaying = true;
-            //room.CurrentTurn = 'X';
+
+            if (room.TurnTimeLimit > 0)
+            {
+                room.TurnDeadline = DateTime.UtcNow.AddSeconds(room.TurnTimeLimit);
+            }
+            else
+            {
+                room.TurnDeadline = null;
+            }
 
             // Nếu ván trước đã kết thúc thì reset
             if (room.WinningCells.Count > 0)
             {
-                room.Board = new char[room.BoardSize, room.BoardSize];
-                room.WinningCells.Clear();
-                room.LastMove = null;
-                room.DrawRequesterConnectionId = null;
-                room.CurrentTurn = 'X';
+                ResetGame(room);
             }
-
             return room;
         }
-
 
         // Nước đi
         public Room? PlacePiece(string roomCode, string connectionId, int row, int col)
@@ -372,7 +406,12 @@ namespace Caro.Services
                 // 9. Chuyển lượt
                 room.CurrentTurn = room.CurrentTurn == 'X'
                     ? 'O'
-                    : 'X';    
+                    : 'X';
+                // đồng hồ
+                if (room.TurnTimeLimit > 0)
+                {
+                    room.TurnDeadline = DateTime.UtcNow.AddSeconds(room.TurnTimeLimit);
+                }
             }
             // 10. Trả Room để Hub broadcast RoomUpdated
             return room;
@@ -420,12 +459,14 @@ namespace Caro.Services
             room.Player1!.DrawCount++;
             room.Player2!.DrawCount++;
 
-            room.IsPlaying = false;
-            room.WinningCells.Clear();
-            room.DrawRequesterConnectionId = null;
-            room.Board = new char[room.BoardSize, room.BoardSize];
-            room.LastMove = null;
-            room.CurrentTurn = 'X';
+            //room.IsPlaying = false;
+            //room.WinningCells.Clear();
+            //room.DrawRequesterConnectionId = null;
+            //room.Board = new char[room.BoardSize, room.BoardSize];
+            //room.LastMove = null;
+            //room.CurrentTurn = 'X';
+
+            ResetGame(room);
 
             return room;
         }
@@ -534,6 +575,60 @@ namespace Caro.Services
             }
 
             return room;
+        }
+
+        public void UpdateTurnTime(string roomCode, string connectionId, int turnTimeLimit)
+        {
+            if (!_rooms.TryGetValue(roomCode, out var room))
+                throw new HubException("Không tìm thấy phòng.");
+
+            if (room.HostConnectionId != connectionId)
+                throw new HubException("Chỉ chủ phòng mới được thay đổi thời gian.");
+
+            if (room.IsPlaying)
+                throw new HubException("Không thể thay đổi thời gian khi trận đấu đang diễn ra.");
+
+            if (turnTimeLimit != 0 &&
+                turnTimeLimit != 15 &&
+                turnTimeLimit != 20 &&
+                turnTimeLimit != 30 &&
+                turnTimeLimit != 60)
+            {
+                throw new HubException("Thời gian không hợp lệ.");
+            }
+
+            room.TurnTimeLimit = turnTimeLimit;
+        }
+
+        public void HandleTurnTimeout(string roomCode)
+        {
+            if (!_rooms.TryGetValue(roomCode, out var room))
+                return;
+
+            room.IsPlaying = false;
+
+            Player winner;
+            Player loser;
+
+            if (room.CurrentTurn == 'X')
+            {
+                loser = room.Player1!;
+                winner = room.Player2!;
+            }
+            else
+            {
+                loser = room.Player2!;
+                winner = room.Player1!;
+            }
+
+            winner.WinCount++;
+            loser.LoseCount++;
+
+            room.WinningCells.Clear();
+            room.LastMove = null;
+            room.DrawRequesterConnectionId = null;
+            ResetGame(room, false);
+
         }
 
     }

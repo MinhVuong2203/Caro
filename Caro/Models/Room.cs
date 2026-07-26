@@ -21,5 +21,7 @@
         public Position? LastMove { get; set; }
         public List<Player> Viewers { get; set; } = [];
         public string? DrawRequesterConnectionId { get; set; } // Yêu cầu hòa
+        public int TurnTimeLimit { get; set; } = 0;
+        public DateTime? TurnDeadline { get; set; }
     }
 }

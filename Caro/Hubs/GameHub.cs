@@ -15,6 +15,7 @@ namespace Caro.Hubs
         {
             _roomManager = roomManager;
         }
+
         // Create room
         public async Task<RoomResponse> CreateRoom(CreateRoomRequest request)
         {
@@ -82,7 +83,28 @@ namespace Caro.Hubs
 
         public async Task ToggleReady(string roomCode)
         {
+            var oldRoom = _roomManager.GetRoom(roomCode);
+
+            bool oldPlayer1Ready = oldRoom.Player1Ready;
+            bool oldPlayer2Ready = oldRoom.Player2Ready;
+
             var room = _roomManager.ToggleReady(roomCode, Context.ConnectionId);
+
+            if (room.Player1?.ConnectionId == Context.ConnectionId &&
+                !oldPlayer1Ready &&
+                room.Player1Ready)
+            { 
+                await Clients.OthersInGroup(roomCode)
+                    .SendAsync("PlayerReady", room.Player1.Name);
+            }
+
+            if (room.Player2?.ConnectionId == Context.ConnectionId &&
+                !oldPlayer2Ready &&
+                room.Player2Ready)
+            {
+                await Clients.OthersInGroup(roomCode)
+                    .SendAsync("PlayerReady", room.Player2.Name);
+            }
 
             await Clients.Group(room.RoomCode)
                 .SendAsync("RoomUpdated", RoomMapper.ToResponse(room));
@@ -177,6 +199,19 @@ namespace Caro.Hubs
 
             // Cập nhật cho những người còn lại trong phòng
             await Clients.Group(room.RoomCode).SendAsync("RoomUpdated", RoomMapper.ToResponse(room));
+        }
+
+        public async Task UpdateTurnTime(string roomCode, int turnTimeLimit)
+        {
+            _roomManager.UpdateTurnTime(
+                roomCode,
+                Context.ConnectionId,
+                turnTimeLimit);
+
+            var room = _roomManager.GetRoom(roomCode);
+
+            await Clients.Group(roomCode)
+                .SendAsync("RoomUpdated", RoomMapper.ToResponse(room));
         }
 
     }

@@ -22,7 +22,9 @@ namespace Caro.Mapper
                 WinningCells = room.WinningCells,
                 LastMove = room.LastMove,
                 Viewers = room.Viewers,
-                DrawRequesterConnectionId = room.DrawRequesterConnectionId
+                DrawRequesterConnectionId = room.DrawRequesterConnectionId,
+                TurnTimeLimit = room.TurnTimeLimit,
+                TurnDeadline = room.TurnDeadline
             };
         }
         private static string[][] ConvertBoard(char[,] board)

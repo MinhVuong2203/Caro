@@ -5,6 +5,8 @@ namespace Caro.Interfaces
 {
     public interface IRoomManager
     {
+        Room GetRoom(string roomCode);
+        IEnumerable<Room> GetRooms();
         Room CreateRoom(string playerName, int boardSize, string connectionId);
 
         Room? JoinRoom(string roomCode, string playerName, string connectionId);
@@ -17,7 +19,8 @@ namespace Caro.Interfaces
         Room AcceptDraw(string roomCode, string connectionId);
         Room RejectDraw(string roomCode, string connectionId);
         Room UpdateAvatar(UpdateAvatarRequest request, string connectionId);
-
         Room? KickPlayer(string roomCode, string requesterConnectionId, string targetConnectionId);
+        void UpdateTurnTime(string roomCode, string connectionId, int turnTimeLimit);
+        void HandleTurnTimeout(string roomCode);
     }
 }
